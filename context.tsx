@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { AppState, Transaction, Goal } from './types';
+import { AppState, Transaction, Goal, TransactionType } from './types';
 
 const AppContext = createContext<AppState | undefined>(undefined);
 
@@ -52,6 +52,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
   };
 
+  // --- Data Management Functions ---
+
+  const clearTransactionsByType = (type: TransactionType) => {
+    setTransactions((prev) => prev.filter((t) => t.type !== type));
+  };
+
+  const clearGoals = () => {
+    setGoals([]);
+  };
+
+  const resetApp = () => {
+    setTransactions([]);
+    setGoals([]);
+    // Opcional: Limpar qualquer outro estado persistido se houver no futuro
+  };
+
   return (
     <AppContext.Provider
       value={{
@@ -61,6 +77,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         deleteTransaction,
         updateGoal,
         setActiveGoal,
+        clearTransactionsByType,
+        clearGoals,
+        resetApp
       }}
     >
       {children}

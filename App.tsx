@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { LayoutDashboard, Target, BarChart3, Menu, Calculator, Plus, User, TrendingUp, TrendingDown, PiggyBank } from 'lucide-react';
+import { LayoutDashboard, Target, BarChart3, Menu, Calculator, Plus, User, TrendingUp, TrendingDown, PiggyBank, Settings as SettingsIcon } from 'lucide-react';
 import Dashboard from './components/Dashboard';
 import TransactionForm, { ExpenseByCategory } from './components/TransactionForms';
 import Goals from './components/Goals';
 import Reports from './components/Reports';
 import { Pricing } from './components/Pricing';
+import { Settings } from './components/Settings';
 import { ViewState } from './types';
 
 const App: React.FC = () => {
@@ -37,6 +38,8 @@ const App: React.FC = () => {
         return <Reports onBack={() => setCurrentView('dashboard')} />;
       case 'pricing':
         return <Pricing onBack={() => setCurrentView('dashboard')} />;
+      case 'settings':
+        return <Settings onBack={() => setCurrentView('dashboard')} />;
       default:
         return <Dashboard onNavigate={setCurrentView} />;
     }
@@ -60,12 +63,20 @@ const App: React.FC = () => {
               <span className="text-[10px] text-gray-400 font-medium tracking-wide">CONTROLE FINANCEIRO</span>
             </div>
           </div>
-          <button 
-            onClick={() => setCurrentView('pricing')}
-            className="w-10 h-10 rounded-full bg-[#1A1A1A] flex items-center justify-center border border-white/5 hover:bg-white/10 transition-colors text-purple-500"
-          >
-            <Calculator className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button 
+                onClick={() => setCurrentView('pricing')}
+                className="w-10 h-10 rounded-full bg-[#1A1A1A] flex items-center justify-center border border-white/5 hover:bg-white/10 transition-colors text-purple-500"
+            >
+                <Calculator className="w-5 h-5" />
+            </button>
+            <button 
+                onClick={() => setCurrentView('settings')}
+                className="w-10 h-10 rounded-full bg-[#1A1A1A] flex items-center justify-center border border-white/5 hover:bg-white/10 transition-colors text-gray-400 hover:text-white"
+            >
+                <SettingsIcon className="w-5 h-5" />
+            </button>
+          </div>
         </header>
 
         {/* Main Scrollable Area */}

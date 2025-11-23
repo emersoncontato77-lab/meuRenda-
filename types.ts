@@ -29,6 +29,10 @@ export interface AppState {
   deleteTransaction: (id: string) => void;
   updateGoal: (g: Goal) => void;
   setActiveGoal: (id: string) => void;
+  // New Management Functions
+  clearTransactionsByType: (type: TransactionType) => void;
+  clearGoals: () => void;
+  resetApp: () => void;
 }
 
 export const EXPENSE_CATEGORIES = [
@@ -47,4 +51,5 @@ export type ViewState =
   | 'category-expenses'
   | 'goals' 
   | 'reports'
-  | 'pricing';
+  | 'pricing'
+  | 'settings';
