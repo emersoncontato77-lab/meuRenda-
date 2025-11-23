@@ -43,6 +43,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   };
 
+  const deleteGoal = (id: string) => {
+    setGoals((prev) => prev.filter((g) => g.id !== id));
+  };
+
   const setActiveGoal = (id: string) => {
     setGoals((prev) =>
       prev.map((g) => ({
@@ -65,7 +69,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const resetApp = () => {
     setTransactions([]);
     setGoals([]);
-    // Opcional: Limpar qualquer outro estado persistido se houver no futuro
   };
 
   return (
@@ -76,6 +79,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addTransaction,
         deleteTransaction,
         updateGoal,
+        deleteGoal,
         setActiveGoal,
         clearTransactionsByType,
         clearGoals,
