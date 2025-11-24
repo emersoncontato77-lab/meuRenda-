@@ -7,18 +7,21 @@ import Reports from './Reports';
 import { Pricing } from './Pricing';
 import { Settings } from './Settings';
 import { ViewState } from '../types';
-import { createClient } from '../lib/supabase';
 import { useRouter } from 'next/navigation';
+import { signOut } from 'firebase/auth';
+import { auth } from '../lib/firebaseConfig';
 
 const MainApp: React.FC = () => {
   const [currentView, setCurrentView] = useState<ViewState>('dashboard');
   const router = useRouter();
-  const supabase = createClient();
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
-    router.push('/login');
-    router.refresh();
+    try {
+      await signOut(auth);
+      router.push('/login');
+    } catch (error) {
+      console.error("Erro ao sair:", error);
+    }
   };
 
   const renderView = () => {

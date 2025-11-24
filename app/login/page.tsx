@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 // @ts-ignore
-import { registerUser, loginUser, checkPayment } from '../../lib/auth';
+import { registerUser, loginUser, checkPayment } from '@/lib/auth';
 import { Loader2, CheckCircle2, AlertCircle, Lock, Mail } from 'lucide-react';
 
 export default function LoginPage() {
@@ -28,13 +28,13 @@ export default function LoginPage() {
         await loginUser(email, password);
         
         // Verificar Pagamento
-        // A função checkPayment agora gerencia o redirecionamento para o Kiwify se retornar false
+        // checkPayment retorna true se pago.
+        // Se false, ela mesma redireciona para o checkout.
         const isPaid = await checkPayment(email);
         
         if (isPaid) {
           router.push('/'); // Redireciona para Home se estiver pago
         }
-        // Se não estiver pago, o window.location.href dentro de checkPayment redirecionará para o Kiwify
       }
     } catch (error: any) {
       let errorMsg = 'Ocorreu um erro inesperado.';
@@ -46,6 +46,7 @@ export default function LoginPage() {
         errorMsg = 'A senha deve ter pelo menos 6 caracteres.';
       }
       
+      console.error(error);
       setMessage({ type: 'error', text: errorMsg });
       setLoading(false);
     }
