@@ -1,0 +1,1 @@
+// Arquivo desativado. Utilize app/page.tsx
