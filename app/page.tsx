@@ -1,7 +1,7 @@
 'use client'
 
 import { AppProvider } from '../context';
-import App from '../components/MainApp'; // Vamos mover o App.tsx para components/MainApp.tsx
+import App from '../components/MainApp';
 
 export default function Home() {
   return (
