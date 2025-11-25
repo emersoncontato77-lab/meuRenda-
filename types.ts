@@ -1,3 +1,4 @@
+
 export type TransactionType = 'INCOME' | 'EXPENSE' | 'INVESTMENT';
 
 export interface Transaction {
@@ -9,7 +10,7 @@ export interface Transaction {
   description?: string; // Observation/Description
 }
 
-export type GoalType = 'MONTHLY' | 'WEEKLY';
+export type GoalType = 'MONTHLY' | 'WEEKLY' | 'CUSTOM';
 
 export interface Goal {
   id: string;
@@ -17,6 +18,7 @@ export interface Goal {
   targetValue: number; // Meta de Lucro Líquido
   workDays: number; // Calculado automaticamente
   selectedWeekDays: number[]; // 0 = Domingo, 1 = Segunda...
+  customTotalDays?: number; // Para meta personalizada
   startDate: string;
   endDate: string;
   isActive: boolean;

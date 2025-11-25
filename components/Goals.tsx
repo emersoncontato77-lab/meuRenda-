@@ -1,7 +1,8 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
-import { Target, Calculator, CheckCircle, ArrowLeft, CalendarDays, BarChart3, TrendingUp, AlertTriangle, Trash2, Edit2 } from 'lucide-react';
+import { Target, Calculator, TrendingUp, AlertTriangle, Trash2, Edit2, ArrowLeft, Calendar, CalendarDays, Clock } from 'lucide-react';
 import { useApp } from '../context';
-import { Button, Input, Select, Card, Header } from './Shared';
+import { Button, Input, Card, Header } from './Shared';
 import { Goal, GoalType } from '../types';
 import { calculateTotals, formatCurrency, getCurrentWeekRange } from '../utils';
 
@@ -19,17 +20,15 @@ const Goals: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   const { goals, updateGoal, deleteGoal, transactions } = useApp();
   
   // --- STATE FOR FORM ---
-  // If there is an active goal, we load it into the form state for editing/viewing
-  // otherwise defaults to empty
   const activeGoal = useMemo(() => goals.find(g => g.isActive), [goals]);
 
   const [type, setType] = useState<GoalType>('MONTHLY');
   const [targetValue, setTargetValue] = useState<string>('');
   const [selectedWeekDays, setSelectedWeekDays] = useState<number[]>([1, 2, 3, 4, 5]); // Mon-Fri default
+  const [customDays, setCustomDays] = useState<string>(''); // Para meta personalizada
   const [marginMode, setMarginMode] = useState<'AUTO' | 'MANUAL'>('AUTO');
   const [manualMargin, setManualMargin] = useState<string>('');
   
-  // Controls for Delete Modal
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   // Initialize form when activeGoal changes
@@ -38,25 +37,25 @@ const Goals: React.FC<{ onBack: () => void }> = ({ onBack }) => {
       setType(activeGoal.type);
       setTargetValue(activeGoal.targetValue.toString());
       setSelectedWeekDays(activeGoal.selectedWeekDays || [1,2,3,4,5]);
+      setCustomDays(activeGoal.customTotalDays ? activeGoal.customTotalDays.toString() : '');
       setMarginMode(activeGoal.marginMode || 'AUTO');
       setManualMargin(activeGoal.manualMarginValue ? activeGoal.manualMarginValue.toString() : '');
     }
   }, [activeGoal]);
 
-  // --- CALCULATIONS ---
+  // --- CÁLCULOS ESPECÍFICOS ---
 
-  // 1. Calculate Real Margin (Auto)
+  // 1. Calcular Margem
   const stats = useMemo(() => calculateTotals(transactions), [transactions]);
   const autoMargin = stats.income > 0 ? (stats.netProfit / stats.income) * 100 : 0;
-
-  // 2. Decide Effective Margin
   const effectiveMargin = marginMode === 'AUTO' ? autoMargin : (parseFloat(manualMargin) || 0);
 
-  // 3. Calculate Work Days in Current Month (Dynamic)
-  const currentWorkDaysCount = useMemo(() => {
-    if (selectedWeekDays.length === 0) return 0;
-    if (type === 'WEEKLY') return selectedWeekDays.length;
+  // 2. Funções de Cálculo de Dias e Valores
+  const targetProfit = parseFloat(targetValue) || 0;
 
+  // Função A: Meta Mensal (Existente)
+  const calculateMonthlyDays = () => {
+    if (selectedWeekDays.length === 0) return 0;
     const now = new Date();
     const year = now.getFullYear();
     const month = now.getMonth();
@@ -70,17 +69,47 @@ const Goals: React.FC<{ onBack: () => void }> = ({ onBack }) => {
       }
     }
     return count;
-  }, [selectedWeekDays, type]);
+  };
 
-  // 4. Calculate Daily Requirements
-  const targetProfit = parseFloat(targetValue) || 0;
-  
-  // Daily Profit Needed
-  const dailyProfitNeeded = currentWorkDaysCount > 0 ? targetProfit / currentWorkDaysCount : 0;
-  
-  // Daily Revenue Needed (Faturamento) = DailyProfit / (Margin / 100)
-  const dailyRevenueNeeded = effectiveMargin > 0 ? dailyProfitNeeded / (effectiveMargin / 100) : 0;
+  // Função B: Meta Semanal (Nova)
+  const calcularMetaSemanal = () => {
+    const daysCount = selectedWeekDays.length || 1; // Evita divisão por zero
+    const dailyTarget = targetProfit / daysCount;
+    return {
+      totalDays: daysCount,
+      dailyTarget: Math.round(dailyTarget * 100) / 100
+    };
+  };
 
+  // Função C: Meta Personalizada (Nova)
+  const calcularMetaPersonalizada = () => {
+    const daysInput = parseInt(customDays) || 1;
+    const dailyTarget = targetProfit / daysInput;
+    return {
+      totalDays: daysInput,
+      dailyTarget: Math.round(dailyTarget * 100) / 100
+    };
+  };
+
+  // --- Determinar valores finais baseado no tipo ---
+  const calculationResult = useMemo(() => {
+    if (type === 'MONTHLY') {
+      const days = calculateMonthlyDays();
+      const daily = days > 0 ? targetProfit / days : 0;
+      return { days, dailyTarget: daily, label: 'Dias Úteis (Mês)' };
+    } else if (type === 'WEEKLY') {
+      const { totalDays, dailyTarget } = calcularMetaSemanal();
+      return { days: totalDays, dailyTarget, label: 'Dias na Semana' };
+    } else {
+      const { totalDays, dailyTarget } = calcularMetaPersonalizada();
+      return { days: totalDays, dailyTarget, label: 'Dias Totais' };
+    }
+  }, [type, targetProfit, selectedWeekDays, customDays]);
+
+  // Daily Revenue Needed (Faturamento Diário Necessário)
+  // Se margem for 0, assume 100% (lucro = faturamento) para não quebrar
+  const safeMargin = effectiveMargin <= 0 ? 100 : effectiveMargin;
+  const dailyRevenueNeeded = calculationResult.dailyTarget / (safeMargin / 100);
 
   // --- DAILY TRACKING LOGIC ---
   const dailyTracking = useMemo(() => {
@@ -92,14 +121,25 @@ const Goals: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
     const weekData = [];
     
-    // Generate data for the current week based on Selected Days
-    // Only show days that are selected as work days
+    // Se for CUSTOM e não depender de dias da semana específicos, 
+    // a lógica de exibição diária pode ser simplificada ou mantida apenas para mostrar o progresso atual.
+    // Para manter consistência visual, mantemos a visualização semanal se dias forem selecionados (Monthly/Weekly).
+    // Se for Custom, talvez mostremos apenas um progresso geral ou assumimos dias úteis.
+    
+    // Para simplificar e manter o padrão visual conforme pedido:
+    // Se for Custom, vamos assumir visualização dos últimos dias ou da semana atual se o usuário estiver operando.
+    // Mas a lógica original depende de `selectedWeekDays`.
+    // Se for CUSTOM, vamos forçar todos os dias como úteis para visualização ou usar os selecionados se o user não limpou.
+    // Vamos usar selectedWeekDays mesmo no custom para "Visualização de Calendário", mas o cálculo matemático usa o input numérico.
+
+    const daysToIterate = activeGoal.type === 'CUSTOM' ? [0,1,2,3,4,5,6] : activeGoal.selectedWeekDays;
+
     for (let i = 0; i < 7; i++) {
        const d = new Date(weekStart);
        d.setDate(d.getDate() + i);
        const dayIndex = d.getDay();
 
-       if (selectedWeekDays.includes(dayIndex)) {
+       if (daysToIterate.includes(dayIndex)) {
           const isToday = d.getTime() === today.getTime();
           const dayTx = transactions.filter(t => {
              const tDate = new Date(t.date);
@@ -107,21 +147,38 @@ const Goals: React.FC<{ onBack: () => void }> = ({ onBack }) => {
           });
           
           const actualRevenue = dayTx.reduce((acc, t) => acc + t.amount, 0);
-          const progress = dailyRevenueNeeded > 0 ? (actualRevenue / dailyRevenueNeeded) * 100 : 0;
+          
+          // Recalcular o dailyRevenueNeeded baseada na meta ativa salva no banco
+          let activeDailyTarget = 0;
+          const activeSafeMargin = (activeGoal.marginMode === 'MANUAL' && activeGoal.manualMarginValue) 
+            ? activeGoal.manualMarginValue 
+            : (autoMargin > 0 ? autoMargin : 100);
 
-          // Status Logic
+          if (activeGoal.type === 'MONTHLY') {
+             // Lógica mensal aproximada para display rápido
+             activeDailyTarget = activeGoal.targetValue / (activeGoal.workDays || 20);
+          } else if (activeGoal.type === 'WEEKLY') {
+             activeDailyTarget = activeGoal.targetValue / (activeGoal.selectedWeekDays.length || 5);
+          } else {
+             activeDailyTarget = activeGoal.targetValue / (activeGoal.customTotalDays || 1);
+          }
+          
+          const activeDailyRevenueNeeded = activeDailyTarget / (activeSafeMargin / 100);
+          
+          const progress = activeDailyRevenueNeeded > 0 ? (actualRevenue / activeDailyRevenueNeeded) * 100 : 0;
+
           let status: 'GREEN' | 'YELLOW' | 'RED' | 'GRAY' = 'GRAY';
           if (progress >= 100) status = 'GREEN';
           else if (progress >= 70) status = 'YELLOW';
-          else if (d.getTime() < today.getTime()) status = 'RED'; // Past day not met
-          else if (isToday) status = 'YELLOW'; // Today in progress
+          else if (d.getTime() < today.getTime()) status = 'RED'; 
+          else if (isToday) status = 'YELLOW'; 
 
           weekData.push({
             date: d,
             name: WEEKDAYS.find(w => w.value === dayIndex)?.name,
             label: WEEKDAYS.find(w => w.value === dayIndex)?.label,
             actualRevenue,
-            targetRevenue: dailyRevenueNeeded,
+            targetRevenue: activeDailyRevenueNeeded,
             progress,
             status,
             isToday
@@ -129,22 +186,7 @@ const Goals: React.FC<{ onBack: () => void }> = ({ onBack }) => {
        }
     }
     return weekData;
-  }, [activeGoal, transactions, selectedWeekDays, dailyRevenueNeeded]);
-
-  // --- MOTIVATIONAL QUOTE LOGIC ---
-  const motivationalQuote = useMemo(() => {
-     if (!dailyTracking) return null;
-     const todayStat = dailyTracking.find(d => d.isToday);
-     
-     if (!todayStat) return "Hoje é dia de descanso. Recarregue as energias!";
-
-     if (todayStat.progress >= 100) return "🔥 Parabéns! Você bateu a meta do dia!";
-     if (todayStat.progress >= 80) return "🚀 Continue firme, você está muito perto da meta!";
-     if (todayStat.progress >= 50) return "💡 Não desista! Ainda dá tempo de recuperar o dia.";
-     if (todayStat.progress > 0) return "📈 O começo é sempre o passo mais importante.";
-     
-     return "Disciplina gera resultado! Vamos começar?";
-  }, [dailyTracking]);
+  }, [activeGoal, transactions, autoMargin]);
 
 
   // --- HANDLERS ---
@@ -159,34 +201,41 @@ const Goals: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
   const handleSaveGoal = (e: React.FormEvent) => {
     e.preventDefault();
-    if (selectedWeekDays.length === 0) {
+    
+    if (type !== 'CUSTOM' && selectedWeekDays.length === 0) {
       alert("Selecione pelo menos um dia de trabalho.");
       return;
+    }
+
+    if (type === 'CUSTOM' && (!customDays || parseInt(customDays) <= 0)) {
+        alert("Defina a quantidade de dias para a meta personalizada.");
+        return;
     }
 
     const newGoal: Goal = {
       id: activeGoal?.id || crypto.randomUUID(),
       type,
       targetValue: parseFloat(targetValue),
-      workDays: currentWorkDaysCount,
-      selectedWeekDays,
+      workDays: calculationResult.days,
+      selectedWeekDays: type === 'CUSTOM' ? [] : selectedWeekDays, // Custom não depende obrigatoriamente dos dias da semana
+      customTotalDays: type === 'CUSTOM' ? parseInt(customDays) : undefined,
       startDate: activeGoal?.startDate || new Date().toISOString().split('T')[0],
-      endDate: '', // Not strictly used for monthly rolling goals
+      endDate: '',
       isActive: true,
       marginMode,
       manualMarginValue: marginMode === 'MANUAL' ? parseFloat(manualMargin) : undefined
     };
 
     updateGoal(newGoal);
-    alert("Meta salva e recalculada com sucesso!");
+    alert("Meta salva com sucesso!");
   };
 
   const handleDeleteGoal = () => {
     if (activeGoal) {
       deleteGoal(activeGoal.id);
-      // Reset form
       setTargetValue('');
       setManualMargin('');
+      setCustomDays('');
       setSelectedWeekDays([1,2,3,4,5]);
       setShowDeleteConfirm(false);
     }
@@ -198,10 +247,10 @@ const Goals: React.FC<{ onBack: () => void }> = ({ onBack }) => {
         <ArrowLeft className="w-5 h-5 mr-2" /> Voltar
       </button>
 
-      <Header title="Planejamento & Metas" subtitle="Defina onde você quer chegar" icon={Target} />
+      <Header title="Metas & Objetivos" subtitle="Defina onde você quer chegar" icon={Target} />
 
       {/* --- ACOMPANHAMENTO DIÁRIO (Se houver meta ativa) --- */}
-      {activeGoal && dailyTracking && (
+      {activeGoal && dailyTracking && dailyTracking.length > 0 && (
         <div className="mb-10 animate-slide-up">
            <div className="bg-gradient-to-r from-[#1A1A1A] to-[#111] p-5 rounded-[2rem] border border-white/5 shadow-xl">
               <div className="flex items-center gap-3 mb-6">
@@ -209,8 +258,10 @@ const Goals: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                     <TrendingUp size={20} />
                  </div>
                  <div>
-                    <h2 className="text-lg font-bold text-white leading-none">Acompanhamento Diário</h2>
-                    <p className="text-[11px] text-gray-400 mt-1">{motivationalQuote}</p>
+                    <h2 className="text-lg font-bold text-white leading-none">
+                        Progresso {activeGoal.type === 'MONTHLY' ? 'Mensal' : activeGoal.type === 'WEEKLY' ? 'Semanal' : 'Personalizado'}
+                    </h2>
+                    <p className="text-[11px] text-gray-400 mt-1">Acompanhe seu desempenho diário</p>
                  </div>
               </div>
 
@@ -252,29 +303,43 @@ const Goals: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                       </div>
                    </div>
                  ))}
-                 {dailyTracking.length === 0 && (
-                    <p className="text-center text-gray-500 text-xs py-4">Nenhum dia de trabalho hoje.</p>
-                 )}
               </div>
            </div>
         </div>
       )}
 
-      {/* --- FORMULÁRIO DE META --- */}
+      {/* --- SELETOR DE TIPO DE META --- */}
+      <div className="grid grid-cols-3 gap-2 mb-6 bg-[#0D0D0D] p-1.5 rounded-2xl border border-white/10">
+        {(['MONTHLY', 'WEEKLY', 'CUSTOM'] as GoalType[]).map((t) => (
+            <button
+                key={t}
+                onClick={() => setType(t)}
+                className={`py-3 rounded-xl text-xs font-bold transition-all ${
+                    type === t 
+                    ? 'bg-neonBlue text-black shadow-lg shadow-neonBlue/20' 
+                    : 'text-gray-500 hover:text-white hover:bg-white/5'
+                }`}
+            >
+                {t === 'MONTHLY' ? 'Mensal' : t === 'WEEKLY' ? 'Semanal' : 'Personalizada'}
+            </button>
+        ))}
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         
-        {/* Lado Esquerdo: Inputs */}
+        {/* Lado Esquerdo: Formulário */}
         <Card>
             <div className="flex justify-between items-center mb-6">
                <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                   <Edit2 size={18} className="text-neonBlue" /> {activeGoal ? 'Editar Meta' : 'Criar Meta'}
+                   <Edit2 size={18} className="text-neonBlue" /> 
+                   {activeGoal ? 'Editar Meta' : 'Configurar Meta'}
                </h2>
                {activeGoal && (
                  <button 
                     onClick={() => setShowDeleteConfirm(true)} 
                     className="text-red-500 hover:bg-red-500/10 p-2 rounded-lg transition-colors text-xs font-bold flex items-center gap-1"
                  >
-                    <Trash2 size={14} /> Excluir Meta
+                    <Trash2 size={14} /> Excluir
                  </button>
                )}
             </div>
@@ -284,45 +349,63 @@ const Goals: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                 {/* 1. Valor da Meta */}
                 <div className="mb-6">
                   <Input 
-                      label="Meta de Lucro Líquido (Mensal)" 
+                      label={type === 'MONTHLY' ? "Meta de Lucro (Mês)" : type === 'WEEKLY' ? "Meta de Lucro (Semana)" : "Meta de Lucro Total"}
                       type="number" 
                       placeholder="0,00"
                       value={targetValue} 
                       onChange={(e) => setTargetValue(e.target.value)}
                       required
                       className="text-2xl font-bold text-neonGreen placeholder-gray-700"
-                      // Removed icon prop as requested
                   />
                 </div>
 
-                {/* 2. Seleção de Dias */}
-                <div className="mb-6">
-                  <label className="text-[10px] text-gray-500 font-bold uppercase tracking-wider ml-1 mb-3 block">
-                    Dias de Trabalho na Semana
-                  </label>
-                  <div className="flex justify-between gap-1">
-                    {WEEKDAYS.map((day) => {
-                      const isSelected = selectedWeekDays.includes(day.value);
-                      return (
-                        <button
-                          key={day.value}
-                          type="button"
-                          onClick={() => toggleDay(day.value)}
-                          className={`flex-1 h-10 rounded-xl text-xs font-bold transition-all duration-200 border ${
-                            isSelected 
-                              ? 'bg-neonBlue text-black border-neonBlue shadow-[0_0_10px_rgba(0,191,255,0.3)]' 
-                              : 'bg-[#0D0D0D] text-gray-600 border-white/10 hover:border-white/30'
-                          }`}
-                        >
-                          {day.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <p className="text-[10px] text-gray-500 mt-2 text-right">
-                    Total calculado: <b className="text-white">{currentWorkDaysCount} dias</b> neste mês
-                  </p>
-                </div>
+                {/* 2. Configuração de Dias (Varia por tipo) */}
+                {type === 'CUSTOM' ? (
+                    <div className="mb-6 animate-fade-in">
+                         <Input 
+                            label="Em quantos dias você quer atingir essa meta?"
+                            type="number" 
+                            placeholder="Ex: 3 dias"
+                            value={customDays} 
+                            onChange={(e) => setCustomDays(e.target.value)}
+                            required
+                        />
+                         <p className="text-[10px] text-gray-500 mt-1">
+                            O app dividirá o valor total por essa quantidade de dias.
+                         </p>
+                    </div>
+                ) : (
+                    <div className="mb-6 animate-fade-in">
+                        <label className="text-[10px] text-gray-500 font-bold uppercase tracking-wider ml-1 mb-3 block">
+                            Dias de Trabalho {type === 'WEEKLY' ? 'na Semana' : 'Considerados'}
+                        </label>
+                        <div className="flex justify-between gap-1">
+                            {WEEKDAYS.map((day) => {
+                            const isSelected = selectedWeekDays.includes(day.value);
+                            return (
+                                <button
+                                key={day.value}
+                                type="button"
+                                onClick={() => toggleDay(day.value)}
+                                className={`flex-1 h-10 rounded-xl text-xs font-bold transition-all duration-200 border ${
+                                    isSelected 
+                                    ? 'bg-neonBlue text-black border-neonBlue shadow-[0_0_10px_rgba(0,191,255,0.3)]' 
+                                    : 'bg-[#0D0D0D] text-gray-600 border-white/10 hover:border-white/30'
+                                }`}
+                                >
+                                {day.label}
+                                </button>
+                            );
+                            })}
+                        </div>
+                        <p className="text-[10px] text-gray-500 mt-2 text-right">
+                            {type === 'MONTHLY' 
+                                ? `Total calculado: ${calculationResult.days} dias úteis neste mês`
+                                : `Total: ${selectedWeekDays.length} dias por semana`
+                            }
+                        </p>
+                    </div>
+                )}
 
                 {/* 3. Margem de Lucro */}
                 <div className="mb-8">
@@ -370,7 +453,7 @@ const Goals: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                 </div>
 
                 <Button type="submit" className="w-full">
-                   {activeGoal ? 'Atualizar Planejamento' : 'Criar Planejamento'}
+                   Salvar Meta {type === 'MONTHLY' ? 'Mensal' : type === 'WEEKLY' ? 'Semanal' : 'Personalizada'}
                 </Button>
             </form>
         </Card>
@@ -386,7 +469,7 @@ const Goals: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
                 <div className="space-y-8 relative z-10">
                    <div>
-                      <span className="text-gray-500 text-xs block mb-1">Meta de Lucro Líquido</span>
+                      <span className="text-gray-500 text-xs block mb-1">Meta de Lucro ({type === 'MONTHLY' ? 'Total' : 'Alvo'})</span>
                       <div className="text-3xl font-bold text-white tracking-tight">
                          {targetValue ? formatCurrency(parseFloat(targetValue)) : 'R$ 0,00'}
                       </div>
@@ -394,8 +477,8 @@ const Goals: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
                    <div className="grid grid-cols-2 gap-4">
                       <div className="bg-white/5 p-3 rounded-xl border border-white/5">
-                         <span className="text-gray-500 text-[10px] block mb-1">Dias Úteis (Mês)</span>
-                         <span className="text-white font-bold text-lg">{currentWorkDaysCount}</span>
+                         <span className="text-gray-500 text-[10px] block mb-1">{calculationResult.label}</span>
+                         <span className="text-white font-bold text-lg">{calculationResult.days}</span>
                       </div>
                       <div className="bg-white/5 p-3 rounded-xl border border-white/5">
                          <span className="text-gray-500 text-[10px] block mb-1">Margem Usada</span>
@@ -405,6 +488,7 @@ const Goals: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                       </div>
                    </div>
 
+                   {/* MENSAGEM DINÂMICA DE RESULTADO */}
                    <div className="p-5 bg-neonGreen/5 rounded-2xl border border-neonGreen/20 shadow-[0_4px_20px_rgba(0,0,0,0.2)]">
                       <span className="text-neonGreen text-[10px] font-bold uppercase tracking-wider block mb-2">
                          Você precisa faturar por dia
@@ -414,8 +498,17 @@ const Goals: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                             ? formatCurrency(dailyRevenueNeeded) 
                             : 'R$ 0,00'}
                       </div>
-                      <p className="text-[10px] text-gray-400 leading-relaxed">
-                         Para atingir seu lucro de {targetValue ? formatCurrency(parseFloat(targetValue)) : 'R$ 0,00'} trabalhando {currentWorkDaysCount} dias no mês.
+                      
+                      <p className="text-[10px] text-gray-400 leading-relaxed mt-3">
+                        {type === 'CUSTOM' ? (
+                            <>
+                                Você precisa fazer <strong className="text-white">{formatCurrency(dailyRevenueNeeded)}</strong> por dia para atingir <strong className="text-white">{formatCurrency(targetProfit)}</strong> de lucro em <strong className="text-white">{calculationResult.days} dias</strong>.
+                            </>
+                        ) : (
+                            <>
+                                Para atingir seu lucro de {targetValue ? formatCurrency(parseFloat(targetValue)) : 'R$ 0,00'} trabalhando {calculationResult.days} dias {type === 'WEEKLY' ? 'na semana' : 'no mês'}.
+                            </>
+                        )}
                       </p>
                    </div>
                 </div>

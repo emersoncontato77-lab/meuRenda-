@@ -2,7 +2,6 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-// @ts-ignore
 import { registerUser, loginUser, checkPayment } from '@/lib/auth';
 import { Loader2, CheckCircle2, AlertCircle, Lock, Mail } from 'lucide-react';
 
