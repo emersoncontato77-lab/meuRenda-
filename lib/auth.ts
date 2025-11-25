@@ -1,9 +1,14 @@
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, User, UserCredential } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore/lite";
+import { doc, getDoc, DocumentData } from "firebase/firestore";
 import { auth, db } from "./firebaseConfig";
 
 // Link do Checkout Kiwify
 const KIWIFY_CHECKOUT_URL = "https://pay.kiwify.com.br/frCIztC";
+
+interface UserData {
+  pago?: boolean;
+  [key: string]: any;
+}
 
 /**
  * Cria um novo usuário no Firebase Auth
@@ -40,8 +45,10 @@ export const checkPayment = async (email: string): Promise<boolean> => {
     const docRef = doc(db, "usuariosPagos", email);
     const docSnap = await getDoc(docRef);
     
+    const data = docSnap.exists() ? (docSnap.data() as UserData) : undefined;
+
     // Verifica se documento existe e se o campo 'pago' é true
-    if (docSnap.exists() && docSnap.data().pago === true) {
+    if (data && data.pago === true) {
       return true;
     } else {
       // Redirecionamento direto caso não tenha pago
